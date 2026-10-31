@@ -16,6 +16,9 @@
 # next.js
 /.next/
 /out/
+/.data/
+/test-results/
+/playwright-report/
 
 # production
 /build

@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Word Memo Admin
 
-## Getting Started
+基于 Next.js App Router、shadcn/ui（Base UI）和 Tailwind CSS 4 的中文管理后台。
 
-First, run the development server:
+## 本地运行
+
+需要 Node.js 22.13 或更新版本，以及 pnpm 9。
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+打开 http://localhost:3000，首次使用请在 `/signup` 注册管理员，注册成功后自动登录。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| 路径           | 页面                                     |
+| -------------- | ---------------------------------------- |
+| `/`            | 根据登录状态跳转至 `/books` 或 `/signin` |
+| `/signup`      | 管理员注册：姓名、邮箱、密码、确认密码   |
+| `/signin`      | 邮箱及密码登录                           |
+| `/books`       | 单词书管理，需要登录                     |
+| `/admin-users` | 管理员管理，需要登录                     |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+单词书支持新建、编辑、删除、发布、转为草稿、搜索、分类筛选、排序及列表/网格视图。初始的八本书为示例书目，词数是书籍元数据，当前不包含逐词内容编辑。
 
-## Learn More
+管理员支持新增、编辑、启用和停用。当前账号不能停用自身；停用账号会撤销该账号的会话。所有注册账号拥有相同的管理员权限，公开注册按当前需求开放。
 
-To learn more about Next.js, take a look at the following resources:
+## 数据和会话
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+数据保存在 `.data/word-memo.sqlite`，重启后保留。密码使用带随机盐的 scrypt 哈希；会话使用 iron-session 的加密 HttpOnly Cookie，并在数据库中校验有效期及撤销状态。登录连续失败五次后，该邮箱会被限制十分钟。
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+开发环境首次启动时会生成 `.data/session-secret`。生产环境可通过 `SESSION_PASSWORD` 设置至少 32 个字符的随机密钥，并需使用 HTTPS。备份与迁移时应保留数据库和密钥，`.data/` 已加入 Git 忽略列表。
 
-## Deploy on Vercel
+该存储方案适合本地开发或单实例部署。部署时需要可持久化的可写磁盘；多实例或临时文件系统应接入共享数据库。公开上线前可按实际账号策略收紧注册入口。
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 验证
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm lint
+pnpm exec tsc --noEmit
+pnpm build
+pnpm test:e2e
+```
+
+端到端测试使用独立测试账号，结束后清理测试数据，覆盖认证、受保护路由、单词书增删改、管理员停用和会话撤销、手机布局与抽屉导航。截图和失败追踪位于 `test-results/`。
+
+测试在 macOS 上优先使用已安装的 Google Chrome；其他环境先运行 `pnpm exec playwright install chromium`，或通过 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` 指定浏览器。测试服务地址为 `http://localhost:3000`。
+
+登录页照片来自 [Unsplash](https://images.unsplash.com/photo-1507842217343-583bb7270b66)，图片已保存在 `public/library.jpg`，运行时无需请求外部图片。
