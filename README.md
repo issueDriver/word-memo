@@ -33,6 +33,25 @@ pnpm dev
 
 该存储方案适合本地开发或单实例部署。部署时需要可持久化的可写磁盘；多实例或临时文件系统应接入共享数据库。公开上线前可按实际账号策略收紧注册入口。
 
+## Drizzle ORM 与 Supabase
+
+已安装 `drizzle-orm`、`postgres`，以及开发工具 `drizzle-kit`、`@next/env`。在项目根目录 `.env` 中设置 `DATABASE_URL`，使用 Supabase 提供的 PostgreSQL 连接字符串。`.env` 已被 Git 忽略。
+
+- `db/index.ts`：服务端连接入口，通过 `import { db } from "@/db"` 使用。连接按查询建立，开发环境复用连接池，并设置 `prepare: false` 兼容 Supabase 的事务连接池。
+- `db/schema.ts`：空的 PostgreSQL schema，未定义任何默认表。
+- `drizzle.config.ts`：Drizzle Kit 配置，按 Next.js 的规则读取 `.env*`，后续迁移文件输出到 `drizzle/`。
+
+以下命令仅已配置，尚未执行：
+
+```bash
+pnpm db:pull      # 从已有数据库读取表结构，生成本地 schema 文件
+pnpm db:generate  # 根据后续定义的 schema 生成本地迁移
+pnpm db:migrate   # 将已生成的迁移应用到数据库
+pnpm db:studio    # 打开 Drizzle Studio
+```
+
+本次仅添加依赖与连接配置，没有创建表、生成迁移、执行 SQL 或修改 Supabase 数据。现有登录、管理员和单词书业务仍使用 `lib/db.ts` 中的本地 SQLite 实现，尚未迁移到 Supabase。
+
 ## 验证
 
 ```bash
