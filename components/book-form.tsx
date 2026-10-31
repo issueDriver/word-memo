@@ -1,9 +1,10 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Check, LoaderCircle, Save } from "lucide-react";
+import { LoaderCircle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { saveBook } from "@/app/actions";
+import { BookCover } from "@/components/book-cover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,23 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FormError } from "@/components/auth-form";
-import { FilterSelect } from "@/components/management";
-import {
-  categories,
-  coverColors,
-  type ActionResult,
-  type Book,
-} from "@/lib/types";
-import { cn } from "@/lib/utils";
-
-const colorNames = {
-  green: "绿色",
-  blue: "蓝色",
-  rose: "玫红",
-  violet: "紫色",
-  amber: "黄色",
-  teal: "青色",
-};
+import type { ActionResult, Book } from "@/lib/types";
 
 function BookForm({
   book,
@@ -40,14 +25,12 @@ function BookForm({
   book: Book | null;
   onClose: () => void;
 }) {
-  const [category, setCategory] = useState<string>(
-    book?.category ?? categories[0],
-  );
-  const [status, setStatus] = useState<string>(book?.status ?? "draft");
-  const [color, setColor] = useState<Book["color"]>(book?.color ?? "green");
-  const [name, setName] = useState(book?.name ?? "");
-  const [subtitle, setSubtitle] = useState(book?.subtitle ?? "");
+  const [title, setTitle] = useState(book?.title ?? "");
   const [wordCount, setWordCount] = useState(String(book?.wordCount ?? 0));
+  const [coverUrl, setCoverUrl] = useState(book?.coverUrl ?? "");
+  const [previewUrl, setPreviewUrl] = useState(book?.coverUrl ?? "");
+  const [bookId, setBookId] = useState(book?.bookId ?? "");
+  const [tags, setTags] = useState(book?.tags.join(", ") ?? "");
   const [state, action, pending] = useActionState(
     async (previous: ActionResult, data: FormData) => {
       try {
@@ -67,52 +50,27 @@ function BookForm({
     <form action={action} className="space-y-5" aria-busy={pending}>
       <fieldset disabled={pending} className="grid min-w-0 gap-5">
         <div className="grid gap-2">
-          <Label htmlFor="book-name">单词书名称</Label>
+          <Label htmlFor="book-title">标题</Label>
           <Input
-            id="book-name"
-            name="name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
+            id="book-title"
+            name="title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
             placeholder="例如：大学英语四级核心词汇"
-            maxLength={60}
-            required
-            className="h-10"
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="book-subtitle">封面英文标题</Label>
-          <Input
-            id="book-subtitle"
-            name="subtitle"
-            value={subtitle}
-            onChange={(event) => setSubtitle(event.target.value)}
-            placeholder="例如：CET-4"
-            maxLength={24}
+            maxLength={120}
             required
             className="h-10"
           />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="book-category">分类</Label>
-            <FilterSelect
-              id="book-category"
-              name="category"
-              label="单词书分类"
-              value={category}
-              onChange={setCategory}
-              options={categories.map((value) => ({ value, label: value }))}
-              className="h-10! w-full min-w-0"
-            />
-          </div>
-          <div className="grid gap-2">
+          <div className="grid min-w-0 gap-2">
             <Label htmlFor="book-word-count">单词数量</Label>
             <Input
               id="book-word-count"
               name="wordCount"
               type="number"
               min={0}
-              max={100000}
+              max={2147483647}
               step={1}
               value={wordCount}
               onChange={(event) => setWordCount(event.target.value)}
@@ -120,55 +78,59 @@ function BookForm({
               className="h-10"
             />
           </div>
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="book-status">发布状态</Label>
-          <FilterSelect
-            id="book-status"
-            name="status"
-            label="发布状态"
-            value={status}
-            onChange={setStatus}
-            options={[
-              { value: "draft", label: "草稿" },
-              { value: "published", label: "已发布" },
-            ]}
-            className="h-10! w-full"
-          />
-        </div>
-        <div className="grid gap-2">
-          <span className="text-sm font-medium" id="color-label">
-            封面颜色
-          </span>
-          <div
-            className="flex gap-3"
-            role="radiogroup"
-            aria-labelledby="color-label"
-          >
-            {coverColors.map((value) => (
-              <label
-                key={value}
-                className={cn(
-                  "cover-swatch relative flex size-8 cursor-pointer items-center justify-center rounded-full outline-offset-3 has-focus-visible:outline-2 has-focus-visible:outline-primary",
-                  `cover-${value}`,
-                  color === value && "ring-2 ring-primary ring-offset-2",
-                )}
-              >
-                <input
-                  type="radio"
-                  name="color"
-                  value={value}
-                  checked={color === value}
-                  onChange={() => setColor(value)}
-                  aria-label={colorNames[value]}
-                  className="absolute inset-0 size-full cursor-pointer opacity-0"
-                />
-                {color === value && (
-                  <Check className="pointer-events-none size-4" />
-                )}
-              </label>
-            ))}
+          <div className="grid min-w-0 gap-2">
+            <Label htmlFor="book-id">bookId</Label>
+            <Input
+              id="book-id"
+              name="bookId"
+              value={bookId}
+              onChange={(event) => setBookId(event.target.value)}
+              placeholder="例如：CET4_1"
+              maxLength={120}
+              required
+              className="h-10"
+              autoCapitalize="none"
+              spellCheck={false}
+            />
           </div>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="book-cover-url">封面 URL</Label>
+          <div className="flex items-start gap-3">
+            <Input
+              id="book-cover-url"
+              name="coverUrl"
+              type="url"
+              value={coverUrl}
+              onChange={(event) => setCoverUrl(event.target.value)}
+              onBlur={() => setPreviewUrl(coverUrl.trim())}
+              placeholder="https://example.com/cover.jpg"
+              maxLength={2048}
+              required
+              className="h-10 min-w-0 flex-1"
+              autoCapitalize="none"
+              spellCheck={false}
+            />
+            <div className="relative h-[90px] w-[64px] shrink-0 overflow-hidden rounded border bg-muted/40">
+              <BookCover
+                src={previewUrl}
+                title={title || "封面预览"}
+                loading="eager"
+              />
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="book-tags">标签（逗号分隔）</Label>
+          <Input
+            id="book-tags"
+            name="tags"
+            value={tags}
+            onChange={(event) => setTags(event.target.value)}
+            placeholder="大学英语, 四级, 核心词汇"
+            maxLength={2000}
+            className="h-10"
+          />
         </div>
       </fieldset>
       <FormError error={state.error} />
@@ -207,13 +169,13 @@ export function BookDialog({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-lg p-6 sm:max-w-[460px]">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-lg p-6 sm:max-w-[480px]">
         <DialogHeader className="mb-2">
           <DialogTitle className="text-lg font-semibold">
             {book ? "编辑单词书" : "新建单词书"}
           </DialogTitle>
-          <DialogDescription>
-            {book ? book.name : "单词书信息"}
+          <DialogDescription className="break-words">
+            {book ? book.title : "单词书信息"}
           </DialogDescription>
         </DialogHeader>
         {open && (

@@ -11,7 +11,7 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 15_000 },
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: "http://127.0.0.1:3100",
     viewport: { width: 1440, height: 1000 },
     trace: "retain-on-failure",
     actionTimeout: 15_000,
@@ -22,9 +22,9 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: "pnpm dev",
-    url: "http://localhost:3000/signin",
-    reuseExistingServer: !process.env.CI,
+    command: "pnpm exec tsx scripts/e2e-server.ts",
+    url: "http://127.0.0.1:3100/signin",
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

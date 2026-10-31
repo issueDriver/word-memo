@@ -2,10 +2,13 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { Brand } from "@/components/brand";
 import { AuthForm } from "@/components/auth-form";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, hasAdminUsers } from "@/lib/auth";
 
 export async function AuthLayout({ mode }: { mode: "signin" | "signup" }) {
   if (await getCurrentUser()) redirect("/books");
+  const initialized = await hasAdminUsers();
+  if (mode === "signup" && initialized) redirect("/signin");
+  if (mode === "signin" && !initialized) redirect("/signup");
   return (
     <main className="grid min-h-dvh lg:grid-cols-[1fr_44%]">
       <div className="flex min-h-dvh flex-col px-6 py-7 sm:px-12">

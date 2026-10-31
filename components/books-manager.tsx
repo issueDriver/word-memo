@@ -2,24 +2,23 @@
 
 import { useState, useTransition } from "react";
 import {
+  Archive,
   BookCopy,
   BookOpen,
   CheckCircle2,
   FilePenLine,
-  LayoutGrid,
-  List,
+  LoaderCircle,
   MoreHorizontal,
   Pencil,
   Plus,
   Search,
   Trash2,
   Upload,
-  Archive,
-  ArrowDownWideNarrow,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteBook, toggleBookStatus } from "@/app/actions";
+import { BookCover } from "@/components/book-cover";
 import { BookDialog } from "@/components/book-form";
 import { IconButton } from "@/components/icon-button";
 import {
@@ -33,14 +32,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -49,78 +40,47 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
-  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { categories, type Book } from "@/lib/types";
+import { FormError } from "@/components/auth-form";
+import type { Book } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-function BookCover({ book, small = false }: { book: Book; small?: boolean }) {
-  return (
-    <div
-      aria-hidden="true"
-      className={cn(
-        "book-cover",
-        `cover-${book.color}`,
-        small ? "book-cover-small" : "book-cover-large",
-      )}
-    >
-      <span className="book-cover-label">WORD MEMO</span>
-      <span
-        className="book-cover-title"
-        style={{
-          fontSize: small
-            ? undefined
-            : book.subtitle.length > 14
-              ? 7
-              : book.subtitle.length > 10
-                ? 10
-                : book.subtitle.length > 7
-                  ? 13
-                  : undefined,
-        }}
-      >
-        {book.subtitle}
-      </span>
-      <BookOpen className="book-cover-icon" strokeWidth={1.2} />
-      <span className="book-cover-footer">VOCABULARY</span>
-    </div>
-  );
-}
 
 export function BooksManager({ books }: { books: Book[] }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
-  const [category, setCategory] = useState("all");
+  const [tag, setTag] = useState("all");
   const [sort, setSort] = useState("updated");
-  const [view, setView] = useState<"list" | "grid">("list");
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<Book | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState<Book | null>(null);
+  const [deleteError, setDeleteError] = useState<string>();
   const [pending, startTransition] = useTransition();
   const published = books.filter((book) => book.status === "published").length;
   const wordCount = books.reduce((sum, book) => sum + book.wordCount, 0);
+  const tags = [...new Set(books.flatMap((book) => book.tags))].sort((a, b) =>
+    a.localeCompare(b, "zh-CN"),
+  );
   const filtered = books
     .filter(
       (book) =>
         (status === "all" || book.status === status) &&
-        (category === "all" || book.category === category) &&
-        `${book.name} ${book.subtitle}`
+        (tag === "all" || book.tags.some((value) => `tag:${value}` === tag)) &&
+        `${book.title} ${book.bookId} ${book.tags.join(" ")}`
           .toLowerCase()
           .includes(search.trim().toLowerCase()),
     )
     .sort((a, b) =>
-      sort === "name"
-        ? a.name.localeCompare(b.name, "zh-CN")
+      sort === "title"
+        ? a.title.localeCompare(b.title, "zh-CN")
         : sort === "words"
           ? b.wordCount - a.wordCount
-          : b.updatedAt.localeCompare(a.updatedAt),
+          : b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id),
     );
   const pageSize = 8;
   const currentPage = Math.min(
@@ -131,10 +91,10 @@ export function BooksManager({ books }: { books: Book[] }) {
     (currentPage - 1) * pageSize,
     currentPage * pageSize,
   );
-  const hasFilters = !!search || category !== "all" || status !== "all";
+  const hasFilters = !!search || tag !== "all" || status !== "all";
   function reset() {
     setSearch("");
-    setCategory("all");
+    setTag("all");
     setStatus("all");
     setPage(1);
   }
@@ -156,41 +116,21 @@ export function BooksManager({ books }: { books: Book[] }) {
       }
     });
   }
-  function actions(book: Book) {
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={`${book.name}的操作`}
-              disabled={pending}
-            />
-          }
-        >
-          <MoreHorizontal />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => edit(book)}>
-            <Pencil />
-            编辑
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => toggle(book)}>
-            {book.status === "published" ? <Archive /> : <Upload />}
-            {book.status === "published" ? "转为草稿" : "发布"}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onClick={() => setDeleting(book)}
-          >
-            <Trash2 />
-            删除
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
+  function confirmDelete() {
+    if (!deleting) return;
+    const target = deleting;
+    startTransition(async () => {
+      try {
+        const result = await deleteBook(target.id);
+        if (result.error) setDeleteError(result.error);
+        else {
+          toast.success("单词书已删除");
+          setDeleting(null);
+        }
+      } catch {
+        setDeleteError("删除失败，请稍后重试");
+      }
+    });
   }
   return (
     <>
@@ -239,48 +179,46 @@ export function BooksManager({ books }: { books: Book[] }) {
       />
       <div
         className="mb-5 flex gap-6 border-b"
-        role="tablist"
+        role="group"
         aria-label="单词书状态"
       >
         {[
           { value: "all", label: "全部单词书", count: books.length },
           { value: "published", label: "已发布", count: published },
           { value: "draft", label: "草稿", count: books.length - published },
-        ].map((tab) => (
+        ].map((item) => (
           <button
-            key={tab.value}
-            role="tab"
-            aria-selected={status === tab.value}
+            key={item.value}
+            aria-pressed={status === item.value}
             onClick={() => {
-              setStatus(tab.value);
+              setStatus(item.value);
               setPage(1);
             }}
             className={cn(
               "flex h-11 items-center gap-2 border-b-2 text-xs transition-colors",
-              status === tab.value
+              status === item.value
                 ? "border-primary font-medium text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground",
             )}
-            tabIndex={0}
           >
-            {tab.label}
+            {item.label}
             <span
               className={cn(
                 "rounded px-1.5 py-0.5 text-[10px] tabular-nums",
-                status === tab.value ? "bg-primary/8" : "bg-muted",
+                status === item.value ? "bg-primary/8" : "bg-muted",
               )}
             >
-              {tab.count}
+              {item.count}
             </span>
           </button>
         ))}
       </div>
       <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div className="relative w-full sm:w-[260px]">
+        <div className="relative w-full sm:w-[280px]">
           <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" />
           <Input
             aria-label="搜索单词书"
-            placeholder="搜索名称或英文标题…"
+            placeholder="搜索标题、bookId 或标签…"
             value={search}
             onChange={(event) => {
               setSearch(event.target.value);
@@ -290,15 +228,16 @@ export function BooksManager({ books }: { books: Book[] }) {
           />
         </div>
         <FilterSelect
-          label="筛选分类"
-          value={category}
+          label="筛选标签"
+          className="w-[160px] max-w-full [&_[data-slot=select-value]]:block [&_[data-slot=select-value]]:truncate"
+          value={tag}
           onChange={(value) => {
-            setCategory(value);
+            setTag(value);
             setPage(1);
           }}
           options={[
-            { value: "all", label: "全部分类" },
-            ...categories.map((value) => ({ value, label: value })),
+            { value: "all", label: "全部标签" },
+            ...tags.map((value) => ({ value: `tag:${value}`, label: value })),
           ]}
         />
         {hasFilters && (
@@ -306,8 +245,7 @@ export function BooksManager({ books }: { books: Book[] }) {
             <X />
           </IconButton>
         )}
-        <div className="ml-auto flex items-center gap-3">
-          <ArrowDownWideNarrow className="hidden size-4 text-muted-foreground xl:block" />
+        <div className="ml-auto">
           <FilterSelect
             label="排序方式"
             value={sort}
@@ -317,137 +255,96 @@ export function BooksManager({ books }: { books: Book[] }) {
             }}
             options={[
               { value: "updated", label: "最近更新" },
-              { value: "name", label: "名称排序" },
+              { value: "title", label: "标题排序" },
               { value: "words", label: "单词数量" },
             ]}
-            className="min-w-[115px]"
           />
-          <div
-            className="flex gap-0.5 rounded-md border bg-muted/40 p-0.5"
-            role="group"
-            aria-label="显示方式"
-          >
-            <IconButton
-              label="列表视图"
-              className={cn(
-                "size-7 rounded-sm",
-                view === "list" && "bg-white shadow-xs",
-              )}
-              aria-pressed={view === "list"}
-              onClick={() => setView("list")}
-            >
-              <List className="size-3.5" />
-            </IconButton>
-            <IconButton
-              label="网格视图"
-              className={cn(
-                "size-7 rounded-sm",
-                view === "grid" && "bg-white shadow-xs",
-              )}
-              aria-pressed={view === "grid"}
-              onClick={() => setView("grid")}
-            >
-              <LayoutGrid className="size-3.5" />
-            </IconButton>
-          </div>
         </div>
       </div>
       {visible.length === 0 ? (
         <EmptyState noun="单词书" filtered={hasFilters} onReset={reset} />
-      ) : view === "list" ? (
-        <div className="mb-5">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead className="h-10 w-[36%] pl-4 text-xs">
-                  单词书
-                </TableHead>
-                <TableHead className="text-xs">分类</TableHead>
-                <TableHead className="text-xs">单词数量</TableHead>
-                <TableHead className="text-xs">状态</TableHead>
-                <TableHead className="text-xs">更新时间</TableHead>
-                <TableHead className="pr-4 text-right text-xs">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visible.map((book) => (
-                <TableRow key={book.id} className="group">
-                  <TableCell className="py-3.5 pl-4">
-                    <div className="flex items-center gap-3.5">
-                      <BookCover book={book} small />
-                      <button
-                        onClick={() => edit(book)}
-                        aria-label={`编辑${book.name}`}
-                        className="min-w-0 text-left"
-                      >
-                        <span className="block max-w-[260px] truncate text-xs font-medium group-hover:text-primary">
-                          {book.name}
-                        </span>
-                        <span className="mt-1.5 block text-[10px] text-muted-foreground">
-                          {book.subtitle}
-                        </span>
-                      </button>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="rounded border px-2 py-1 text-[11px] text-muted-foreground">
-                      {book.category}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-xs tabular-nums">
-                    {book.wordCount.toLocaleString("en-US")}
-                    <span className="ml-1 text-[10px] text-muted-foreground">
-                      词
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge
-                      active={book.status === "published"}
-                      activeLabel="已发布"
-                      inactiveLabel="草稿"
-                    />
-                  </TableCell>
-                  <TableCell className="text-[11px] text-muted-foreground tabular-nums">
-                    {formatDate(book.updatedAt)}
-                  </TableCell>
-                  <TableCell className="pr-3 text-right">
-                    {actions(book)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
       ) : (
-        <div className="mb-6 grid grid-cols-1 gap-4 min-[460px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {visible.map((book) => (
+        <div className="mb-6 grid grid-cols-1 gap-5 min-[560px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {visible.map((book, index) => (
             <article
               key={book.id}
-              className="overflow-hidden rounded-lg border transition-shadow hover:shadow-sm"
+              className="min-w-0 overflow-hidden rounded-lg border bg-white transition-shadow hover:shadow-sm"
+              aria-label={book.title}
             >
               <button
                 onClick={() => edit(book)}
-                className={cn(
-                  "flex h-[200px] w-full items-center justify-center",
-                  `cover-stage-${book.color}`,
-                )}
-                aria-label={`编辑${book.name}`}
+                className="relative block h-[220px] w-full border-b bg-muted/35 p-4"
+                aria-label={`编辑${book.title}封面`}
               >
-                <BookCover book={book} />
+                <span className="relative block h-full w-full">
+                  <BookCover
+                    src={book.coverUrl}
+                    title={book.title}
+                    loading={index < 3 ? "eager" : "lazy"}
+                  />
+                </span>
               </button>
-              <div className="px-4 pt-4 pb-3">
+              <div className="p-4">
                 <div className="mb-2 flex items-start justify-between gap-2">
-                  <h2 className="min-w-0 pt-1 text-xs leading-5 font-medium">
-                    {book.name}
+                  <h2 className="min-w-0 break-words text-sm leading-6 font-medium [overflow-wrap:anywhere]">
+                    {book.title}
                   </h2>
-                  {actions(book)}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 shrink-0"
+                          aria-label={`${book.title}的操作`}
+                          disabled={pending}
+                        />
+                      }
+                    >
+                      <MoreHorizontal />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => edit(book)}>
+                        <Pencil />
+                        编辑
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => toggle(book)}>
+                        {book.status === "published" ? <Archive /> : <Upload />}
+                        {book.status === "published" ? "转为草稿" : "发布"}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => {
+                          setDeleteError(undefined);
+                          setDeleting(book);
+                        }}
+                      >
+                        <Trash2 />
+                        删除
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-                <div className="mb-4 flex gap-2 text-[11px] text-muted-foreground">
-                  <span>{book.category}</span>
-                  <span>·</span>
-                  <span>{book.wordCount.toLocaleString("en-US")} 词</span>
+                <div className="flex items-center gap-1.5 text-xs tabular-nums">
+                  <BookOpen className="size-3.5 text-muted-foreground" />
+                  {book.wordCount.toLocaleString("en-US")}
+                  <span className="text-muted-foreground">词</span>
                 </div>
-                <div className="flex items-center justify-between border-t pt-3">
+                <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">
+                  bookId: {book.bookId}
+                </p>
+                <div className="mt-3 flex min-h-6 flex-wrap gap-1.5">
+                  {book.tags.map((item) => (
+                    <span
+                      key={item}
+                      className="max-w-full break-words rounded border bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground [overflow-wrap:anywhere]"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
                   <StatusBadge
                     active={book.status === "published"}
                     activeLabel="已发布"
@@ -456,6 +353,13 @@ export function BooksManager({ books }: { books: Book[] }) {
                   <span className="text-[10px] text-muted-foreground">
                     {formatDate(book.updatedAt)}
                   </span>
+                  <IconButton
+                    label={`编辑${book.title}`}
+                    className="size-7"
+                    onClick={() => edit(book)}
+                  >
+                    <Pencil className="size-3.5" />
+                  </IconButton>
                 </div>
               </div>
             </article>
@@ -483,33 +387,26 @@ export function BooksManager({ books }: { books: Book[] }) {
           <AlertDialogHeader>
             <AlertDialogTitle>删除单词书？</AlertDialogTitle>
             <AlertDialogDescription className="break-all">
-              确定删除「{deleting?.name}」吗？删除后无法恢复。
+              确定删除「{deleting?.title}」吗？删除后无法恢复。
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <FormError error={deleteError} />
           <AlertDialogFooter className="m-0 rounded-none border-0 bg-transparent p-0 pt-2">
-            <AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
-            <AlertDialogAction
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => setDeleting(null)}
+            >
+              取消
+            </Button>
+            <Button
               variant="destructive"
               disabled={pending}
-              onClick={() => {
-                if (!deleting) return;
-                const target = deleting;
-                startTransition(async () => {
-                  try {
-                    const result = await deleteBook(target.id);
-                    if (result.error) toast.error(result.error);
-                    else {
-                      toast.success("单词书已删除");
-                      setDeleting(null);
-                    }
-                  } catch {
-                    toast.error("删除失败，请稍后重试");
-                  }
-                });
-              }}
+              onClick={confirmDelete}
             >
+              {pending && <LoaderCircle className="animate-spin" />}
               {pending ? "删除中…" : "确认删除"}
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

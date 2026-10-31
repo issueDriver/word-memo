@@ -64,6 +64,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { ActionResult, AdminUser } from "@/lib/types";
+import { adminRoleLabels, adminRoles } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function AdminForm({
@@ -75,6 +76,7 @@ function AdminForm({
 }) {
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
+  const [role, setRole] = useState<string>(user?.role ?? "admin");
   const [state, action, pending] = useActionState(
     async (previous: ActionResult, data: FormData) => {
       try {
@@ -122,10 +124,28 @@ function AdminForm({
             className="h-10"
           />
         </div>
+        <div className="grid gap-2">
+          <Label htmlFor="admin-role">角色</Label>
+          <FilterSelect
+            id="admin-role"
+            name="role"
+            label="角色"
+            value={role}
+            onChange={setRole}
+            options={adminRoles.map((value) => ({
+              value,
+              label: adminRoleLabels[value],
+            }))}
+          />
+        </div>
         {!user && (
           <>
-            <PasswordField />
-            <PasswordField id="confirmPassword" label="确认密码" />
+            <PasswordField id="admin-password" name="password" />
+            <PasswordField
+              id="admin-confirm-password"
+              name="confirmPassword"
+              label="确认密码"
+            />
           </>
         )}
       </fieldset>
@@ -357,7 +377,7 @@ export function AdminUsersManager({
                   <TableCell>
                     <span className="inline-flex items-center gap-1.5 text-[11px]">
                       <ShieldCheck className="size-3.5 text-muted-foreground" />
-                      管理员
+                      {adminRoleLabels[user.role]}
                     </span>
                   </TableCell>
                   <TableCell>

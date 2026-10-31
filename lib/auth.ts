@@ -1,106 +1,108 @@
 import "server-only";
 
-import { randomBytes, createHash, scrypt, timingSafeEqual } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import path from "node:path";
-import { promisify } from "node:util";
+import { randomBytes, createHash } from "node:crypto";
+import { and, eq, gt, lt } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { getIronSession } from "iron-session";
 import { cache } from "react";
-import { findUser, getDb } from "@/lib/db";
+import { db } from "@/db";
+import { adminSessions, adminUsers } from "@/db/schema";
+import {
+  adminColumns,
+  hasAdministrators,
+  serializeAdmin,
+} from "@/lib/admin-store";
 
-const deriveKey = promisify(scrypt);
-const sessionLifetime = 60 * 60 * 24 * 7;
-
-function sessionPassword() {
-  if (process.env.SESSION_PASSWORD) return process.env.SESSION_PASSWORD;
-  const directory = path.join(process.cwd(), ".data");
-  const filename = path.join(directory, "session-secret");
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  try {
-    writeFileSync(filename, randomBytes(48).toString("hex"), {
-      flag: "wx",
-      mode: 0o600,
-    });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-  }
-  return readFileSync(filename, "utf8");
-}
-
-async function session() {
-  await connection();
-  return getIronSession<{ token?: string }>(await cookies(), {
-    password: sessionPassword(),
-    cookieName: "word-memo-session",
-    ttl: sessionLifetime,
-    cookieOptions: {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-    },
-  });
-}
+export const SESSION_COOKIE = "word-memo-session";
+export const SESSION_LIFETIME_SECONDS = 60 * 60 * 24 * 7;
 
 function tokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export async function hashPassword(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  const hash = (await deriveKey(password, salt, 64)) as Buffer;
-  return `${salt}:${hash.toString("hex")}`;
+function validToken(token: string | undefined): token is string {
+  return !!token && /^[a-f0-9]{64}$/.test(token);
 }
 
-export async function verifyPassword(password: string, stored: string) {
-  const [salt, hash] = stored.split(":");
-  const actual = (await deriveKey(password, salt, 64)) as Buffer;
-  const expected = Buffer.from(hash, "hex");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
+export const hasAdminUsers = cache(async () => {
+  await connection();
+  return hasAdministrators();
+});
 
 export async function createSession(userId: string) {
-  const current = await session();
-  const db = getDb();
-  if (current.token)
-    db.prepare("DELETE FROM sessions WHERE id = ?").run(
-      tokenHash(current.token),
-    );
-  db.prepare("DELETE FROM sessions WHERE expiresAt < ?").run(Date.now());
-  current.token = randomBytes(32).toString("hex");
-  db.prepare("INSERT INTO sessions VALUES (?, ?, ?)").run(
-    tokenHash(current.token),
-    userId,
-    Date.now() + sessionLifetime * 1000,
-  );
-  await current.save();
+  const cookieStore = await cookies();
+  const oldToken = cookieStore.get(SESSION_COOKIE)?.value;
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + SESSION_LIFETIME_SECONDS * 1000);
+
+  await db.transaction(async (tx) => {
+    const [user] = await tx
+      .select({ status: adminUsers.status })
+      .from(adminUsers)
+      .where(eq(adminUsers.id, userId))
+      .for("share");
+    if (!user || user.status !== "active")
+      throw new Error("Cannot create a session for an inactive administrator.");
+    if (validToken(oldToken))
+      await tx
+        .delete(adminSessions)
+        .where(eq(adminSessions.id, tokenHash(oldToken)));
+    await tx
+      .delete(adminSessions)
+      .where(lt(adminSessions.expiresAt, new Date()));
+    await tx
+      .insert(adminSessions)
+      .values({ id: tokenHash(token), userId, expiresAt });
+  });
+
+  cookieStore.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_LIFETIME_SECONDS,
+    expires: expiresAt,
+  });
 }
 
 export async function destroySession() {
-  const current = await session();
-  if (current.token)
-    getDb()
-      .prepare("DELETE FROM sessions WHERE id = ?")
-      .run(tokenHash(current.token));
-  current.destroy();
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  if (validToken(token))
+    await db
+      .delete(adminSessions)
+      .where(eq(adminSessions.id, tokenHash(token)));
+  cookieStore.delete(SESSION_COOKIE);
 }
 
 export const getCurrentUser = cache(async () => {
-  const current = await session();
-  if (!current.token) return null;
-  const record = getDb()
-    .prepare("SELECT userId FROM sessions WHERE id = ? AND expiresAt > ?")
-    .get(tokenHash(current.token), Date.now()) as
-    { userId: string } | undefined;
-  const user = record ? findUser(record.userId) : undefined;
-  return user?.status === "active" ? user : null;
+  await connection();
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!validToken(token)) return null;
+  const [user] = await db
+    .select(adminColumns)
+    .from(adminSessions)
+    .innerJoin(adminUsers, eq(adminSessions.userId, adminUsers.id))
+    .where(
+      and(
+        eq(adminSessions.id, tokenHash(token)),
+        gt(adminSessions.expiresAt, new Date()),
+        eq(adminUsers.status, "active"),
+      ),
+    )
+    .limit(1);
+  return user ? serializeAdmin(user) : null;
 });
 
 export async function requireUser() {
   const user = await getCurrentUser();
-  if (!user) redirect("/signin");
+  if (!user) redirect((await hasAdminUsers()) ? "/signin" : "/signup");
+  return user;
+}
+
+export async function requireSystemAdmin() {
+  const user = await requireUser();
+  if (user.role !== "system_admin") redirect("/books");
   return user;
 }

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "words_book_rank_unique" ON "words" USING btree ("bookId","wordRank");

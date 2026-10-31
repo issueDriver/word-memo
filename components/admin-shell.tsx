@@ -20,6 +20,7 @@ import { IconButton } from "@/components/icon-button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { AdminUser } from "@/lib/types";
+import { adminRoleLabels } from "@/lib/types";
 
 function LogoutButton() {
   const { pending } = useFormStatus();
@@ -81,35 +82,40 @@ export function AdminShell({
             href: "/admin-users",
             icon: Users,
           },
-        ].map((item) => (
-          <div key={item.href}>
-            <p className="mb-2 px-3 text-[11px] font-medium text-muted-foreground">
-              {item.label}
-            </p>
-            <Link
-              href={item.href}
-              onClick={() => setMobileOpen(false)}
-              aria-current={pathname === item.href ? "page" : undefined}
-              className={cn(
-                "flex h-10 items-center gap-3 rounded-md px-3 text-[13px] font-medium transition-colors",
-                pathname === item.href
-                  ? "bg-primary/9 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <item.icon className="size-[18px]" strokeWidth={1.8} />
-              {item.name}
-              {pathname === item.href && (
-                <span className="ml-auto size-1.5 rounded-full bg-primary" />
-              )}
-            </Link>
-          </div>
-        ))}
+        ]
+          .filter(
+            (item) =>
+              item.href !== "/admin-users" || user.role === "system_admin",
+          )
+          .map((item) => (
+            <div key={item.href}>
+              <p className="mb-2 px-3 text-[11px] font-medium text-muted-foreground">
+                {item.label}
+              </p>
+              <Link
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                aria-current={pathname === item.href ? "page" : undefined}
+                className={cn(
+                  "flex h-10 items-center gap-3 rounded-md px-3 text-[13px] font-medium transition-colors",
+                  pathname === item.href
+                    ? "bg-primary/9 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <item.icon className="size-[18px]" strokeWidth={1.8} />
+                {item.name}
+                {pathname === item.href && (
+                  <span className="ml-auto size-1.5 rounded-full bg-primary" />
+                )}
+              </Link>
+            </div>
+          ))}
       </nav>
       <div className="mt-auto px-4 pt-8 pb-4">
         <div className="mb-4 flex items-center gap-2 px-2 text-[11px] text-muted-foreground">
           <ShieldCheck className="size-3.5" />
-          管理员工作空间
+          {adminRoleLabels[user.role]}
         </div>
         <div className="flex items-center gap-2.5 border-t pt-4">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#e7ede5] text-xs font-semibold text-[#50644d]">

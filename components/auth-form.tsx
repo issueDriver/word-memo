@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState, useState } from "react";
 import {
   ArrowRight,
@@ -20,11 +19,13 @@ import { IconButton } from "@/components/icon-button";
 
 export function PasswordField({
   id = "password",
+  name = id,
   label = "密码",
   autoComplete = "new-password",
   minLength = 8,
 }: {
   id?: string;
+  name?: string;
   label?: string;
   autoComplete?: string;
   minLength?: number;
@@ -38,12 +39,12 @@ export function PasswordField({
         <LockKeyhole className="pointer-events-none absolute top-3 left-3 size-4 text-muted-foreground" />
         <Input
           id={id}
-          name={id}
+          name={name}
           value={value}
           onChange={(event) => setValue(event.target.value)}
           type={visible ? "text" : "password"}
           placeholder={
-            id === "confirmPassword"
+            name === "confirmPassword"
               ? "再次输入密码"
               : minLength > 1
                 ? "至少 8 个字符"
@@ -95,12 +96,10 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
           <LockKeyhole className="size-5 text-primary" strokeWidth={1.7} />
         </div>
         <h1 className="text-[28px] leading-tight font-semibold">
-          {registering ? "创建管理员账号" : "欢迎回来"}
+          {registering ? "注册系统管理员" : "欢迎回来"}
         </h1>
         <p className="mt-3 text-sm text-muted-foreground">
-          {registering
-            ? "注册 Word Memo，开启管理工作。"
-            : "登录 Word Memo 管理后台"}
+          {registering ? "Word Memo · 首次初始化" : "登录 Word Memo 管理后台"}
         </p>
       </div>
       <form action={action} className="grid gap-5" aria-busy={pending}>
@@ -169,15 +168,6 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
           {pending ? <LoaderCircle className="animate-spin" /> : <ArrowRight />}
         </Button>
       </form>
-      <p className="mt-7 text-center text-sm text-muted-foreground">
-        {registering ? "已有账号？" : "还没有账号？"}
-        <Link
-          href={registering ? "/signin" : "/signup"}
-          className="ml-1 font-medium text-primary underline-offset-4 hover:underline"
-        >
-          {registering ? "立即登录" : "注册管理员"}
-        </Link>
-      </p>
     </div>
   );
 }
